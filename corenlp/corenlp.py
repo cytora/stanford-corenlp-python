@@ -33,6 +33,7 @@ from unidecode import unidecode
 from subprocess import call
 
 VERBOSE = False
+#VERBOSE = True
 STATE_START, STATE_TEXT, STATE_WORDS, STATE_TREE, STATE_DEPENDENCY, STATE_COREFERENCE = 0, 1, 2, 3, 4, 5
 WORD_PATTERN = re.compile('\[([^\]]+)\]')
 CR_PATTERN = re.compile(r"\((\d*),(\d)*,\[(\d*),(\d*)\)\) -> \((\d*),(\d)*,\[(\d*),(\d*)\)\), that is: \"(.*)\" -> \"(.*)\"")
@@ -92,10 +93,13 @@ def init_corenlp_command(corenlp_path, memory, properties):
     """
 
     # TODO: Can edit jar constants
-    jars = ["stanford-corenlp-3.2.0.jar",
-            "stanford-corenlp-3.2.0-models.jar",
+#    jars = ["stanford-corenlp-3.2.0.jar",
+#            "stanford-corenlp-3.2.0-models.jar",
+    jars = ["stanford-corenlp-3.4.jar",
+            "stanford-corenlp-3.4-models.jar",            
             "xom.jar",
             "joda-time.jar",
+            "ejml-0.23.jar",
             "jollyday.jar"
             ]
 
@@ -241,6 +245,8 @@ def parse_parser_xml_results(xml, file_name="", raw_output=False):
                                    if 'dep' in dep
                                    for i in xrange(len(dep['dep']))
                                    if dep['@type'] == 'collapsed-ccprocessed-dependencies'],
+                  'sentimentValue': str(raw_sent_list[j]['@sentimentValue']),
+                  'sentiment': str(raw_sent_list[j]['@sentiment']),
                   'text': extract_words_from_xml(raw_sent_list[j]),
                   'parsetree': str(raw_sent_list[j]['parse']),
                   'words': [[str(token['word']), OrderedDict([
@@ -261,7 +267,8 @@ def parse_parser_xml_results(xml, file_name="", raw_output=False):
     return results
 
 
-def parse_xml_output(input_dir, corenlp_path=DIRECTORY, memory="3g", raw_output=False, properties='default.properties'):
+def parse_xml_output(input_dir, corenlp_path=DIRECTORY, memory="3g",
+                     raw_output=False, properties='default.properties'):
     """Because interaction with the command-line interface of the CoreNLP
     tools is limited to very short text bits, it is necessary to parse xml
     output"""
@@ -451,7 +458,8 @@ class StanfordCoreNLP:
         return json.dumps(self.raw_parse(text))
 
 
-def batch_parse(input_folder, corenlp_path=DIRECTORY, memory="3g", raw_output=False):
+def batch_parse(input_folder, corenlp_path=DIRECTORY, properties='default.properties', raw_output=False, memory="3g"):
+                
     """
     This function takes input files,
     sends list of input files to the Stanford parser,
@@ -464,7 +472,8 @@ def batch_parse(input_folder, corenlp_path=DIRECTORY, memory="3g", raw_output=Fa
     if not os.path.exists(input_folder):
         raise Exception("input_folder does not exist")
 
-    return parse_xml_output(input_folder, corenlp_path, memory, raw_output=raw_output)
+    return parse_xml_output(input_folder, corenlp_path, memory,
+                            raw_output=raw_output, properties=properties)
 
 
 if __name__ == '__main__':
