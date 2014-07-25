@@ -2,7 +2,18 @@
 
 This is a fork of Dustin Smith's [stanford-corenlp-python](https://github.com/dasmith/stanford-corenlp-python), a Python interface to [Stanford CoreNLP](http://nlp.stanford.edu/software/corenlp.shtml). It can either use as python package, or run as a JSON-RPC server.
 
-## Edited
+## Edited (this fork)
+   * updated to Stanford CoreNLP v3.4.0
+   * specifically intended to work for sentiment analysis
+      for full sentiment analysis output:
+      - use '-s' flag when starting server
+        OR
+      - for single sentence analysis:
+        corenlp = StanfordCoreNLP(corenlp_path=corenlp_dir,
+                                  classname="edu.stanford.nlp.sentiment.SentimentPipeline")
+        corenlp.raw_parse("I don't know half of you half as well as I should like")
+
+## Edited (by Wordseer team)
    * Added multi-threaded load balancing
    * Update to Stanford CoreNLP v3.2.0
    * Fix many bugs & improve performance
