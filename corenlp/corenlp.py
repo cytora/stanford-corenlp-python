@@ -38,8 +38,7 @@ STATE_START, STATE_TEXT, STATE_WORDS, STATE_TREE, STATE_DEPENDENCY, STATE_COREFE
 WORD_PATTERN = re.compile('\[([^\]]+)\]')
 CR_PATTERN = re.compile(r"\((\d*),(\d)*,\[(\d*),(\d*)\)\) -> \((\d*),(\d)*,\[(\d*),(\d*)\)\), that is: \"(.*)\" -> \"(.*)\"")
 
-DIRECTORY = "stanford-corenlp-full-2013-06-20"
-
+DIRECTORY = "/usr/local/stanford-corenlp-full-2014-06-16/"
 
 class bc:
     HEADER = '\033[95m'
@@ -49,27 +48,21 @@ class bc:
     FAIL = '\033[91m'
     ENDC = '\033[0m'
 
-
 class ProcessError(Exception):
-
     def __init__(self, value):
         self.value = value
 
     def __str__(self):
         return repr(self.value)
-
 
 class ParserError(Exception):
-
     def __init__(self, value):
         self.value = value
 
     def __str__(self):
         return repr(self.value)
 
-
 class TimeoutError(Exception):
-
     def __init__(self, value):
         self.value = value
 
@@ -78,7 +71,6 @@ class TimeoutError(Exception):
 
 
 class OutOfMemoryError(Exception):
-
     def __init__(self, value):
         self.value = value
 
@@ -86,7 +78,8 @@ class OutOfMemoryError(Exception):
         return repr(self.value)
 
 
-def init_corenlp_command(corenlp_path, memory, properties):
+def init_corenlp_command(corenlp_path, memory, properties,
+                         classname="edu.stanford.nlp.pipeline.StanfordCoreNLP"):
     """
     Checks the location of the jar files.
     Spawns the server as a process.
@@ -104,16 +97,21 @@ def init_corenlp_command(corenlp_path, memory, properties):
             ]
 
     java_path = "java"
-    classname = "edu.stanford.nlp.pipeline.StanfordCoreNLP"
-    # include the properties file, so you can change defaults
-    # but any changes in output format will break parse_parser_results()
-    current_dir_pr =  os.path.dirname(os.path.abspath(__file__)) + "/" + properties
-    if os.path.exists(properties):
-        props = "-props %s" % (properties.replace(" ", "\\ "))
-    elif os.path.exists(current_dir_pr):
-        props = "-props %s" % (current_dir_pr.replace(" ", "\\ "))
+
+    # use properties file or, in case of Sentiment analysis, something else
+    if classname == "edu.stanford.nlp.pipeline.StanfordCoreNLP":
+        # include the properties file, so you can change defaults
+        # but any changes in output format will break parse_parser_results()
+        current_dir_pr =  os.path.dirname(os.path.abspath(__file__)
+                                          ) + "/" + properties
+        if os.path.exists(properties):
+            props = "-props %s" % (properties.replace(" ", "\\ "))
+        elif os.path.exists(current_dir_pr):
+            props = "-props %s" % (current_dir_pr.replace(" ", "\\ "))
+        else:
+            raise Exception("Error! Cannot locate: %s" % properties)
     else:
-        raise Exception("Error! Cannot locate: %s" % properties)
+        props = '-output PROBABILITIES,ROOT -stdin'
 
     # add and check classpaths
     jars = [corenlp_path + "/" + jar for jar in jars]
@@ -211,6 +209,27 @@ def parse_parser_results(text):
                     src_i, src_pos, src_l, src_r = int(src_i) - 1, int(src_pos) - 1, int(src_l) - 1, int(src_r) - 1
                     sink_i, sink_pos, sink_l, sink_r = int(sink_i) - 1, int(sink_pos) - 1, int(sink_l) - 1, int(sink_r) - 1
                     coref_set.append(((src_word, src_i, src_pos, src_l, src_r), (sink_word, sink_i, sink_pos, sink_l, sink_r)))
+
+    return results
+
+def parse_parser_sentimentLines(text):
+    """ similar nasty to parse_parser_results, but designed to parse the
+        kind of lines that are returned from the sentiment analysis code
+        in the interactive mode
+    """
+    results = dict()
+    for i,line in enumerate(unidecode(text.decode('utf-8')).split("\n")):
+        line = re.sub(r'\r','',line)
+        if (i <= 1):
+            continue  # 1st line is just the input sentence, skip
+        elif (i == 2):
+            results['tree'] = line  # the PENNTREE output
+            continue
+        elif (i == 3):
+            results['nodeinfo'] = list()    # other stuff like PROBABILITIES
+            results['nodeinfo'].append(line)
+        else:
+            results['nodeinfo'].append(line)
 
     return results
 
@@ -318,15 +337,18 @@ class StanfordCoreNLP:
     Can be run as a JSON-RPC server or imported as a module.
     """
 
-    def _spawn_corenlp(self):
-        if VERBOSE:
-            print self.start_corenlp
-        self.corenlp = pexpect.spawn(self.start_corenlp, maxread=8192, searchwindowsize=80)
+    def _spawn_corenlp(self, checkProgress=False):
+        print 'spawning nlp process using command:', self.start_corenlp        
+            
+        self.corenlp = pexpect.spawn(self.start_corenlp, maxread=8192,
+                                     searchwindowsize=80)
 
         # show progress bar while loading the models
-        if VERBOSE:
+        # this is VERY sensitive to the models loaded and run mode, skip
+        if checkProgress:
             widgets = ['Loading Models: ', Fraction()]
-            pbar = ProgressBar(widgets=widgets, maxval=5, force_update=True).start()
+            pbar = ProgressBar(widgets=widgets, maxval=5,
+                               force_update=True).start()
             # Model timeouts:
             # pos tagger model (~5sec)
             # NER-all classifier (~33sec)
@@ -337,13 +359,16 @@ class StanfordCoreNLP:
             for i in xrange(5):
                 self.corenlp.expect("done.", timeout=timeouts[i])  # Load model
                 pbar.update(i + 1)
-            self.corenlp.expect("Entering interactive shell.")
+            self.corenlp.expect(["Entering interactive shell.","\nNLP> "])
             pbar.finish()
 
-        # interactive shell
-        self.corenlp.expect("\nNLP> ")
+        # check for interactive shell response
+        self.corenlp.expect(["Processing will end when EOF is reached.",
+                             pexpect.EOF, "\nNLP> "])
 
-    def __init__(self, corenlp_path=DIRECTORY, memory="3g", properties='default.properties', serving=False):
+    def __init__(self, corenlp_path=DIRECTORY, memory="3g",
+                 properties='default.properties', serving=False,
+                 classname="edu.stanford.nlp.pipeline.StanfordCoreNLP"):
         """
         Checks the location of the jar files.
         Spawns the server as a process.
@@ -351,7 +376,9 @@ class StanfordCoreNLP:
 
         # spawn the server
         self.serving = serving
-        self.start_corenlp = init_corenlp_command(corenlp_path, memory, properties)
+        self.start_corenlp = init_corenlp_command(corenlp_path, memory,
+                                                  properties, 
+                                                  classname=classname)
         self._spawn_corenlp()
 
     def close(self, force=True):
@@ -386,6 +413,8 @@ class StanfordCoreNLP:
                     self.corenlp.read_nonblocking(8192, 0.1)
                 except pexpect.TIMEOUT:
                     break
+                except pexpect.EOF:
+                    break                
         clean_up()
 
         self.corenlp.sendline(to_send)
@@ -397,24 +426,26 @@ class StanfordCoreNLP:
         max_expected_time = max(300.0, len(to_send) / 3.0)
 
         # repeated_input = self.corenlp.except("\n")  # confirm it
-        t = self.corenlp.expect(["\nNLP> ", pexpect.TIMEOUT, pexpect.EOF,
+        t = self.corenlp.expect(["\nNLP> ", "Negative", "Positive",
+                                 pexpect.TIMEOUT, pexpect.EOF,
                                  "\nWARNING: Parsing of sentence failed, possibly because of out of memory."],
                                 timeout=max_expected_time)
         incoming = self.corenlp.before
-        if t == 1:
+
+        if t == 3:
             # TIMEOUT, clean up anything left in buffer
             clean_up()
             print >>sys.stderr, {'error': "timed out after %f seconds" % max_expected_time,
                                  'input': to_send,
                                  'output': incoming}
             raise TimeoutError("Timed out after %d seconds" % max_expected_time)
-        elif t == 2:
+        elif t == 4:
             # EOF, probably crash CoreNLP process
             print >>sys.stderr, {'error': "CoreNLP terminates abnormally while parsing",
                                  'input': to_send,
                                  'output': incoming}
             raise ProcessError("CoreNLP process terminates abnormally while parsing")
-        elif t == 3:
+        elif t == 5:
             # out of memory
             print >>sys.stderr, {'error': "WARNING: Parsing of sentence failed, possibly because of out of memory.",
                                  'input': to_send,
@@ -424,7 +455,15 @@ class StanfordCoreNLP:
         if VERBOSE:
             print "%s\n%s" % ('=' * 40, incoming)
         try:
-            results = parse_parser_results(incoming)
+            # parse output
+            if t == 1:
+                results = {"sentiment": "Negative"}
+                results.update(parse_parser_sentimentLines(incoming))
+            elif t == 2:
+                results = {"sentiment": "Positive"}
+                results.update(parse_parser_sentimentLines(incoming))
+            else:   # default non-Sentiment mode results
+                results = parse_parser_results(incoming)
         except Exception as e:
             if VERBOSE:
                 print traceback.format_exc()
@@ -486,20 +525,31 @@ if __name__ == '__main__':
                       help='Port to serve on (default 8080)')
     parser.add_option('-H', '--host', default='127.0.0.1',
                       help='Host to serve on (default localhost; 0.0.0.0 to make public)')
-    parser.add_option('-q', '--quiet', action='store_false', default=True, dest='verbose',
+    parser.add_option('-q', '--quiet', action='store_false', default=True,
+                      dest='verbose',
                       help="Quiet mode, don't print status msgs to stdout")
     parser.add_option('-S', '--corenlp', default=DIRECTORY,
-                      help='Stanford CoreNLP tool directory (default %s)' % DIRECTORY)
+                      help='Stanford CoreNLP tool directory (default %s)' %\
+                      DIRECTORY)
+    parser.add_option('-s', '--sentiment', action='store_true', default=False,
+                      dest="sentiment",
+                      help='run sentiment analysis (only)')
     parser.add_option('-P', '--properties', default='default.properties',
-                      help='Stanford CoreNLP properties fieles (default: default.properties)')
+                      help='Stanford CoreNLP properties fields (default: default.properties)')
     options, args = parser.parse_args()
     VERBOSE = options.verbose
     # server = jsonrpc.Server(jsonrpc.JsonRpc20(),
     #                         jsonrpc.TransportTcpIp(addr=(options.host, int(options.port))))
+
+    classname = "edu.stanford.nlp.pipeline.StanfordCoreNLP"
+    if (options.sentiment):
+        classname = "edu.stanford.nlp.sentiment.SentimentPipeline"
+
     try:
         server = SimpleJSONRPCServer((options.host, int(options.port)))
 
-        nlp = StanfordCoreNLP(options.corenlp, properties=options.properties, serving=True)
+        nlp = StanfordCoreNLP(options.corenlp, properties=options.properties,
+                              serving=True, classname=classname)
         server.register_function(nlp.parse)
         server.register_function(nlp.raw_parse)
 
