@@ -220,6 +220,7 @@ def parse_parser_sentimentLines(text):
     results = dict()
     for i,line in enumerate(unidecode(text.decode('utf-8')).split("\n")):
         line = re.sub(r'\r','',line)
+#        print i,'"%s"' % line
         if (i <= 1):
             continue  # 1st line is just the input sentence, skip
         elif (i == 2):
