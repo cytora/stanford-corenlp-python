@@ -31,6 +31,7 @@ import shutil
 from progressbar import ProgressBar, Fraction
 from unidecode import unidecode
 from subprocess import call
+import functools32
 
 VERBOSE = False
 #VERBOSE = True
@@ -490,6 +491,7 @@ class StanfordCoreNLP:
                 return []
             raise e
 
+    @functools32.lru_cache(maxsize=16)
     def parse(self, text):
         """
         This function takes a text string, sends it to the Stanford parser,
