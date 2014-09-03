@@ -340,7 +340,7 @@ class StanfordCoreNLP:
     Can be run as a JSON-RPC server or imported as a module.
     """
 
-    def _spawn_corenlp(self, checkProgress=False):
+    def _spawn_corenlp(self, checkProgress=True):
         print 'spawning nlp process using command:', self.start_corenlp        
             
         self.corenlp = pexpect.spawn(self.start_corenlp, maxread=8192,
@@ -358,7 +358,7 @@ class StanfordCoreNLP:
             # NER-muc classifier (~60sec)
             # CoNLL classifier (~50sec)
             # PCFG (~3sec)
-            timeouts = [20, 200, 600, 600, 20]
+            timeouts = [20, 600, 600, 600, 600]
             for i in xrange(5):
                 self.corenlp.expect("done.", timeout=timeouts[i])  # Load model
                 pbar.update(i + 1)
