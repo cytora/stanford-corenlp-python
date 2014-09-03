@@ -130,11 +130,6 @@ def init_corenlp_command(corenlp_path, memory, properties,
     return "%s %s -cp %s %s %s" % (java_path, limit, ':'.join(jars), classname, props)
 
 
-def remove_id(word):
-    """Removes the numeric suffix from the parsed recognized words: e.g. 'word-2' > 'word' """
-    return word.replace("'", "")
-
-
 def parse_bracketed(s):
     '''Parse word features [abc=... def = ...]
     Also manages to parse out features that have XML within them
@@ -197,8 +192,7 @@ def parse_parser_results(text):
             else:
                 split_entry = re.split("\(|, |-", line[:-1])
                 if len(split_entry) == 5:
-                    rel, left, leftindex, right, rightindex = map(lambda x: remove_id(x), split_entry)
-                    sentence['dependencies'].append(tuple([rel, left, leftindex, right, rightindex]))
+                    sentence['dependencies'].append(tuple(split_entry))
 
         elif state == STATE_COREFERENCE:
             if "Coreference set" in line:
