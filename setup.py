@@ -22,7 +22,8 @@ setup(
         "pexpect >= 2.4",
         "unidecode >= 0.04.12",
         "xmltodict >= 0.4.6",
-        "functools32 == 3.2.3-1"
+        "functools32 == 3.2.3-1",
+        "jsonrpclib == 0.1.3"
     ],
     classifiers=[
         ("License :: OSI Approved :: GNU General Public License v2 or later "
